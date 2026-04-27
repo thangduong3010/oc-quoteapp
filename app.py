@@ -4,7 +4,7 @@ import os
 
 app = Flask(__name__)
 
-quotes = os.getenv("QUOTES", "OpenShift is awesome|Tekton rocks|VMs and containers together").split("|")
+quotes = os.getenv("QUOTES", "OpenShift is awesome|Tekton rocks|VMs and containers together|Automating").split("|")
 
 @app.route("/")
 def index():
