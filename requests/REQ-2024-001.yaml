@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: VMProvisioningRequest
+metadata:
+  code: REQ-2024-001
+  requestedBy: john.doe
+  team: platform-engineering
+  date: 2024-01-15
+
+vms:
+  - name: pltf-web-001
+    os:
+      image: quay.io/containerdisks/fedora:latest
+      user: fedora
+    compute:
+      cpu: 2
+      memory: 2Gi
+    disk:
+      size: 2Gi
+      storageClass: gp3
+      accessMode: ReadWriteOnce
+    network:
+      interfaces:
+        - name: default
+          network: pod
+
+  - name: pltf-db-001
+    os:
+      image: quay.io/containerdisks/centos-stream9:latest
+      user: cloud-user
+    compute:
+      cpu: 1
+      memory: 1Gi
+    disk:
+      size: 2Gi
+      storageClass: gp3
+      accessMode: ReadWriteOnce
+    network:
+      interfaces:
+        - name: default
+          network: pod
