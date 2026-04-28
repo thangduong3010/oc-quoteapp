@@ -17,16 +17,17 @@ spec:
         #!/bin/bash
         set -e
 
-        # Install python + pyyaml
-        pip3 install pyyaml -q 2>/dev/null || \
-          python3 -m pip install pyyaml -q
+        # Install pyyaml to /tmp/pylib
+        curl -sL https://bootstrap.pypa.io/pip/3.9/get-pip.py -o /tmp/get-pip.py
+        python3 /tmp/get-pip.py --target=/tmp/pylib -q
+        PYTHONPATH=/tmp/pylib python3 -m pip install pyyaml --target=/tmp/pylib -q
 
-        # Download virtctl only
+        # Download virtctl
         curl -sLo /tmp/virtctl \
           https://github.com/kubevirt/kubevirt/releases/download/v1.7.0/virtctl-v1.7.0-linux-amd64
         chmod +x /tmp/virtctl
 
-        python3 << 'PYEOF'
+        PYTHONPATH=/tmp/pylib python3 << 'PYEOF'
         import yaml
         import sys
         import os
