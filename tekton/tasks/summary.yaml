@@ -1,0 +1,64 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: summary
+spec:
+  params:
+    - name: request-file
+      type: string
+    - name: vm-ips
+      type: string
+  workspaces:
+    - name: source
+  steps:
+    - name: summarize
+      image: python:3.11-slim
+      script: |
+        #!/bin/bash
+        pip install pyyaml -q
+
+        python3 << 'PYEOF'
+        import yaml
+        import sys
+        import json
+
+        REQUEST_FILE = "/workspace/source/$(params.request-file)"
+        VM_IPS       = json.loads('$(params.vm-ips)')
+
+        with open(REQUEST_FILE) as f:
+            request = yaml.safe_load(f)
+
+        meta = request["metadata"]
+        vms  = request["vms"]
+
+        print("")
+        print("=" * 60)
+        print(f"  REQUEST SUMMARY")
+        print("=" * 60)
+        print(f"  Code:         {meta['code']}")
+        print(f"  Requested by: {meta['requestedBy']}")
+        print(f"  Team:         {meta['team']}")
+        print(f"  Date:         {meta.get('date', 'N/A')}")
+        print("=" * 60)
+        print(f"  VMs Provisioned: {len(vms)}")
+        print("-" * 60)
+
+        for vm in vms:
+            name    = vm["name"]
+            compute = vm["compute"]
+            disk    = vm["disk"]
+            ip      = VM_IPS.get(name, "unknown")
+            print(f"  ✅ {name}")
+            print(f"     OS:      {vm['os']['image'].split('/')[-1]}")
+            print(f"     CPU:     {compute['cpu']} cores")
+            print(f"     Memory:  {compute['memory']}")
+            print(f"     Disk:    {disk['size']} ({disk['storageClass']})")
+            print(f"     IP:      {ip}")
+            print("")
+
+        print("=" * 60)
+        print(f"  STATUS: ✅ COMPLETED ({len(vms)}/{len(vms)} VMs provisioned)")
+        print(f"  REQUEST: {meta['code']}")
+        print("=" * 60)
+        PYEOF
