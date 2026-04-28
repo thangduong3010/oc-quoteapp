@@ -1,0 +1,169 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: provision-vm
+spec:
+  params:
+    - name: request-file
+      type: string
+  workspaces:
+    - name: source
+    - name: ssh-keys
+  steps:
+    - name: provision
+      image: python:3.11-slim
+      script: |
+        #!/bin/bash
+        pip install pyyaml -q
+
+        # Download oc CLI
+        curl -sLo /tmp/oc.tar.gz \
+          https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+        tar -xzf /tmp/oc.tar.gz -C /tmp/
+        chmod +x /tmp/oc
+
+        # Download virtctl
+        curl -sLo /tmp/virtctl \
+          https://github.com/kubevirt/kubevirt/releases/download/v1.7.0/virtctl-v1.7.0-linux-amd64
+        chmod +x /tmp/virtctl
+
+        python3 << 'PYEOF'
+        import yaml
+        import sys
+        import os
+        import subprocess
+
+        REQUEST_FILE = "/workspace/source/$(params.request-file)"
+        SSH_PUB_KEY  = open("/workspace/ssh-keys/id_rsa.pub").read().strip()
+        OC           = "/tmp/oc"
+        VIRTCTL      = "/tmp/virtctl"
+        NAMESPACE    = os.environ.get("NAMESPACE", "")
+
+        def run(cmd, check=True):
+            print(f"+ {cmd}")
+            result = subprocess.run(
+                cmd, shell=True,
+                capture_output=True, text=True
+            )
+            if result.stdout:
+                print(result.stdout)
+            if result.stderr:
+                print(result.stderr)
+            if check and result.returncode != 0:
+                print(f"❌ Command failed: {cmd}")
+                sys.exit(1)
+            return result
+
+        # Get current namespace
+        result = run(f"{OC} project -q", check=False)
+        NAMESPACE = result.stdout.strip()
+        print(f"Namespace: {NAMESPACE}")
+
+        # Load request
+        with open(REQUEST_FILE) as f:
+            request = yaml.safe_load(f)
+
+        code = request["metadata"]["code"]
+        vms  = request["vms"]
+
+        print(f"\nProvisioning {len(vms)} VM(s) for request {code}...\n")
+
+        for vm in vms:
+            name         = vm["name"]
+            image        = vm["os"]["image"]
+            cpu          = vm["compute"]["cpu"]
+            memory       = vm["compute"]["memory"]
+            disk_size    = vm["disk"]["size"]
+            storage_class = vm["disk"]["storageClass"]
+            access_mode  = vm["disk"]["accessMode"]
+
+            print(f"{'='*50}")
+            print(f"Provisioning VM: {name}")
+            print(f"  OS:      {image}")
+            print(f"  CPU:     {cpu}")
+            print(f"  Memory:  {memory}")
+            print(f"  Disk:    {disk_size} ({storage_class})")
+            print(f"{'='*50}")
+
+            # Build VM manifest
+            manifest = f"""
+        apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
+        metadata:
+          name: {name}
+          labels:
+            app: {code}
+            kubevirt.io/vm: {name}
+            request-code: {code}
+        spec:
+          runStrategy: Manual
+          dataVolumeTemplates:
+            - metadata:
+                name: {name}-disk
+              spec:
+                storage:
+                  resources:
+                    requests:
+                      storage: {disk_size}
+                  storageClassName: {storage_class}
+                  accessModes:
+                    - {access_mode}
+                source:
+                  registry:
+                    url: docker://{image}
+          template:
+            metadata:
+              labels:
+                kubevirt.io/vm: {name}
+                request-code: {code}
+            spec:
+              domain:
+                cpu:
+                  cores: {cpu}
+                memory:
+                  guest: {memory}
+                devices:
+                  disks:
+                    - name: rootdisk
+                      disk:
+                        bus: virtio
+                  interfaces:
+                    - name: default
+                      masquerade: {{}}
+              networks:
+                - name: default
+                  pod: {{}}
+              volumes:
+                - name: rootdisk
+                  dataVolume:
+                    name: {name}-disk
+                - name: cloudinitdisk
+                  cloudInitNoCloud:
+                    userData: |
+                      #cloud-config
+                      user: {vm["os"]["user"]}
+                      password: redhat123
+                      chpasswd: {{expire: False}}
+                      ssh_authorized_keys:
+                        - {SSH_PUB_KEY}
+                      runcmd:
+                        - systemctl enable --now sshd
+        """
+
+            # Write manifest to file
+            manifest_path = f"/tmp/{name}.yaml"
+            with open(manifest_path, "w") as f:
+                f.write(manifest)
+
+            # Apply the VM
+            run(f"{OC} apply -f {manifest_path}")
+
+            # Start the VM
+            print(f"Starting VM {name}...")
+            run(f"{VIRTCTL} start {name}")
+
+            print(f"✅ VM {name} created and started\n")
+
+        print(f"\n✅ All {len(vms)} VM(s) provisioned for request {code}")
+        PYEOF
