@@ -1,14 +1,31 @@
-- name: pltf-web-001
+vms:
+  - name: pltf-web-001
     os:
-      image: quay.io/containerdisks/windows:latest  # ← not allowed
+      image: quay.io/containerdisks/windows:latest
     compute:
-      cpu: 8                                         # ← exceeds limit
-      memory: 32Gi                                   # ← exceeds limit
+      cpu: 8
+      memory: 32Gi
     disk:
-      size: 100Gi                                    # ← exceeds limit
-      storageClass: fake-sc                          # ← not allowed
+      size: 100Gi
+      storageClass: fake-sc
       accessMode: ReadWriteOnce
     network:
       interfaces:
         - name: default
-          network: vlan-100-web                      # ← not allowed
+          network: vlan-100-web
+
+  - name: pltf-db-001
+    os:
+      image: quay.io/containerdisks/centos-stream9:latest
+      user: cloud-user
+    compute:
+      cpu: 1
+      memory: 1Gi
+    disk:
+      size: 10Gi
+      storageClass: gp3
+      accessMode: ReadWriteOnce
+    network:
+      interfaces:
+        - name: default
+          network: pod
