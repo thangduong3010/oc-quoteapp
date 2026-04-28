@@ -12,18 +12,16 @@ spec:
     - name: ssh-keys
   steps:
     - name: provision
-      image: python:3.11-slim
+      image: quay.io/openshift/origin-cli:latest
       script: |
         #!/bin/bash
-        pip install pyyaml -q
+        set -e
 
-        # Download oc CLI
-        curl -sLo /tmp/oc.tar.gz \
-          https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
-        tar -xzf /tmp/oc.tar.gz -C /tmp/
-        chmod +x /tmp/oc
+        # Install python + pyyaml
+        pip3 install pyyaml -q 2>/dev/null || \
+          python3 -m pip install pyyaml -q
 
-        # Download virtctl
+        # Download virtctl only
         curl -sLo /tmp/virtctl \
           https://github.com/kubevirt/kubevirt/releases/download/v1.7.0/virtctl-v1.7.0-linux-amd64
         chmod +x /tmp/virtctl
@@ -36,9 +34,8 @@ spec:
 
         REQUEST_FILE = "/workspace/source/$(params.request-file)"
         SSH_PUB_KEY  = open("/workspace/ssh-keys/id_rsa.pub").read().strip()
-        OC           = "/tmp/oc"
+        OC           = "oc"
         VIRTCTL      = "/tmp/virtctl"
-        NAMESPACE    = os.environ.get("NAMESPACE", "")
 
         def run(cmd, check=True):
             print(f"+ {cmd}")
@@ -55,12 +52,10 @@ spec:
                 sys.exit(1)
             return result
 
-        # Get current namespace
         result = run(f"{OC} project -q", check=False)
         NAMESPACE = result.stdout.strip()
         print(f"Namespace: {NAMESPACE}")
 
-        # Load request
         with open(REQUEST_FILE) as f:
             request = yaml.safe_load(f)
 
@@ -70,13 +65,14 @@ spec:
         print(f"\nProvisioning {len(vms)} VM(s) for request {code}...\n")
 
         for vm in vms:
-            name         = vm["name"]
-            image        = vm["os"]["image"]
-            cpu          = vm["compute"]["cpu"]
-            memory       = vm["compute"]["memory"]
-            disk_size    = vm["disk"]["size"]
+            name          = vm["name"]
+            image         = vm["os"]["image"]
+            user          = vm["os"]["user"]
+            cpu           = vm["compute"]["cpu"]
+            memory        = vm["compute"]["memory"]
+            disk_size     = vm["disk"]["size"]
             storage_class = vm["disk"]["storageClass"]
-            access_mode  = vm["disk"]["accessMode"]
+            access_mode   = vm["disk"]["accessMode"]
 
             print(f"{'='*50}")
             print(f"Provisioning VM: {name}")
@@ -86,7 +82,6 @@ spec:
             print(f"  Disk:    {disk_size} ({storage_class})")
             print(f"{'='*50}")
 
-            # Build VM manifest
             manifest = f"""
         apiVersion: kubevirt.io/v1
         kind: VirtualMachine
@@ -142,7 +137,7 @@ spec:
                   cloudInitNoCloud:
                     userData: |
                       #cloud-config
-                      user: {vm["os"]["user"]}
+                      user: {user}
                       password: redhat123
                       chpasswd: {{expire: False}}
                       ssh_authorized_keys:
@@ -151,15 +146,12 @@ spec:
                         - systemctl enable --now sshd
         """
 
-            # Write manifest to file
             manifest_path = f"/tmp/{name}.yaml"
             with open(manifest_path, "w") as f:
                 f.write(manifest)
 
-            # Apply the VM
             run(f"{OC} apply -f {manifest_path}")
 
-            # Start the VM
             print(f"Starting VM {name}...")
             run(f"{VIRTCTL} start {name}")
 
