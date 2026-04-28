@@ -45,3 +45,40 @@ spec:
       params:
         - name: request-file
           value: $(params.request-file)
+
+    - name: provision-vm
+      runAfter: [validate-request]
+      taskRef:
+        name: provision-vm
+      workspaces:
+        - name: source
+          workspace: source
+        - name: ssh-keys
+          workspace: ssh-keys
+      params:
+        - name: request-file
+          value: $(params.request-file)
+
+    - name: wait-for-all-vms
+      runAfter: [provision-vm]
+      taskRef:
+        name: wait-for-all-vms
+      workspaces:
+        - name: source
+          workspace: source
+      params:
+        - name: request-file
+          value: $(params.request-file)
+
+    - name: summary
+      runAfter: [wait-for-all-vms]
+      taskRef:
+        name: summary
+      workspaces:
+        - name: source
+          workspace: source
+      params:
+        - name: request-file
+          value: $(params.request-file)
+        - name: vm-ips
+          value: $(tasks.wait-for-all-vms.results.vm-ips)
