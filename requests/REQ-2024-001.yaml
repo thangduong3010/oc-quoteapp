@@ -1,18 +1,28 @@
+# requests/REQ-2024-001.yaml
+apiVersion: v1
+kind: VMProvisioningRequest
+metadata:
+  code: REQ-2024-001
+  requestedBy: john.doe
+  team: platform-engineering
+  date: 2024-01-15
+
 vms:
   - name: pltf-web-001
     os:
-      image: quay.io/containerdisks/windows:latest
+      image: quay.io/containerdisks/fedora:latest
+      user: fedora
     compute:
-      cpu: 8
-      memory: 32Gi
+      cpu: 2
+      memory: 2Gi
     disk:
-      size: 100Gi
-      storageClass: fake-sc
+      size: 10Gi
+      storageClass: gp3
       accessMode: ReadWriteOnce
     network:
       interfaces:
         - name: default
-          network: vlan-100-web
+          network: pod
 
   - name: pltf-db-001
     os:
