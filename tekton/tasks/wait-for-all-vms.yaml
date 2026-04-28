@@ -14,17 +14,17 @@ spec:
       description: JSON map of vm-name to IP address
   steps:
     - name: wait
-      image: python:3.11-slim
+      image: quay.io/openshift/origin-cli:latest
       script: |
         #!/bin/bash
-        pip install pyyaml -q
+        set -e
 
-        curl -sLo /tmp/oc.tar.gz \
-          https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
-        tar -xzf /tmp/oc.tar.gz -C /tmp/
-        chmod +x /tmp/oc
+        # Install pyyaml to /tmp/pylib
+        curl -sL https://bootstrap.pypa.io/pip/3.9/get-pip.py -o /tmp/get-pip.py
+        python3 /tmp/get-pip.py --target=/tmp/pylib -q
+        PYTHONPATH=/tmp/pylib python3 -m pip install pyyaml --target=/tmp/pylib -q
 
-        python3 << 'PYEOF'
+        PYTHONPATH=/tmp/pylib python3 << 'PYEOF'
         import yaml
         import sys
         import os
@@ -33,7 +33,7 @@ spec:
         import json
 
         REQUEST_FILE = "/workspace/source/$(params.request-file)"
-        OC           = "/tmp/oc"
+        OC           = "oc"
         MAX_ATTEMPTS = 60
         SLEEP        = 15
 
@@ -47,8 +47,8 @@ spec:
         with open(REQUEST_FILE) as f:
             request = yaml.safe_load(f)
 
-        code = request["metadata"]["code"]
-        vms  = request["vms"]
+        code     = request["metadata"]["code"]
+        vms      = request["vms"]
         vm_names = [vm["name"] for vm in vms]
 
         print(f"Waiting for {len(vm_names)} VM(s) to be running...")
@@ -91,7 +91,6 @@ spec:
         print(f"\nWaiting 60s for cloud-init to finish...")
         time.sleep(60)
 
-        # Write IPs to result
         result_str = json.dumps(vm_ips)
         print(f"\nVM IPs: {result_str}")
         with open("/tekton/results/vm-ips", "w") as f:
