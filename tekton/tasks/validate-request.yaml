@@ -13,7 +13,9 @@ spec:
     - name: validate
       image: python:3.11-slim
       script: |
-        #!/usr/bin/env python3
+        #!/bin/bash
+        pip install pyyaml -q
+        python3 << 'PYEOF'
         import yaml
         import sys
         import re
@@ -21,7 +23,6 @@ spec:
 
         REQUEST_FILE = "/workspace/source/$(params.request-file)"
 
-        # ── Sandbox Limits ──────────────────────────────────────
         LIMITS = {
             "max_cpu_cores": 2,
             "max_memory_gi": 4,
@@ -38,12 +39,10 @@ spec:
                 "ReadWriteOnce", "ReadWriteMany"
             ],
             "allowed_networks": ["pod"],
-            "name_pattern":    r"^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$",
+            "name_pattern": r"^[a-z0-9][a-z0-9-]{0,28}[a-z0-9]$",
         }
 
-        # ── Helpers ──────────────────────────────────────────────
         def parse_memory(value):
-            """Convert memory string to Gi float. e.g. 2Gi→2.0, 512Mi→0.5"""
             value = str(value)
             if value.endswith("Gi"):
                 return float(value[:-2])
@@ -57,7 +56,6 @@ spec:
                 return float(value)
 
         def parse_disk(value):
-            """Convert disk string to Gi int. e.g. 20Gi→20"""
             value = str(value)
             if value.endswith("Gi"):
                 return int(value[:-2])
@@ -66,7 +64,6 @@ spec:
             else:
                 return int(value)
 
-        # ── Load Request File ────────────────────────────────────
         print(f"Loading request file: {REQUEST_FILE}")
         if not os.path.exists(REQUEST_FILE):
             print(f"❌ VALIDATION FAILED: request file not found: {REQUEST_FILE}")
@@ -75,7 +72,6 @@ spec:
         with open(REQUEST_FILE) as f:
             request = yaml.safe_load(f)
 
-        # ── Validate Metadata ────────────────────────────────────
         errors = []
         warnings = []
 
@@ -83,14 +79,11 @@ spec:
         code = meta.get("code", "")
         if not code:
             errors.append("metadata.code is required")
-
         if not meta.get("requestedBy"):
             errors.append("metadata.requestedBy is required")
-
         if not meta.get("team"):
             errors.append("metadata.team is required")
 
-        # ── Validate VMs ─────────────────────────────────────────
         vms = request.get("vms", [])
         if not vms:
             errors.append("at least one VM must be specified")
@@ -99,7 +92,6 @@ spec:
         for i, vm in enumerate(vms):
             prefix = f"vms[{i}] ({vm.get('name', 'unnamed')})"
 
-            # Name
             name = vm.get("name", "")
             if not name:
                 errors.append(f"{prefix}: name is required")
@@ -113,7 +105,6 @@ spec:
             else:
                 vm_names.append(name)
 
-            # OS
             os_spec = vm.get("os", {})
             image = os_spec.get("image", "")
             if not image:
@@ -126,7 +117,6 @@ spec:
             if not os_spec.get("user"):
                 errors.append(f"{prefix}: os.user is required")
 
-            # Compute
             compute = vm.get("compute", {})
             cpu = compute.get("cpu")
             if cpu is None:
@@ -156,7 +146,6 @@ spec:
                         f"is invalid, use format: 1Gi, 512Mi"
                     )
 
-            # Disk
             disk = vm.get("disk", {})
             size = disk.get("size")
             if size is None:
@@ -193,7 +182,6 @@ spec:
                     f"           allowed: {', '.join(LIMITS['allowed_access_modes'])}"
                 )
 
-            # Network
             network = vm.get("network", {})
             interfaces = network.get("interfaces", [])
             if not interfaces:
@@ -206,7 +194,6 @@ spec:
                         f"           allowed: {', '.join(LIMITS['allowed_networks'])}"
                     )
 
-        # ── Print Results ─────────────────────────────────────────
         print("")
         print("=" * 50)
         print(f"REQUEST: {code}")
@@ -222,7 +209,7 @@ spec:
             for e in errors:
                 print(f"   {e}")
             print("")
-            print(f"Fix {REQUEST_FILE} and push again.")
+            print(f"Fix $(params.request-file) and push again.")
             print("=" * 50)
             sys.exit(1)
 
@@ -238,3 +225,4 @@ spec:
                 f"os={vm['os']['image'].split('/')[-1]}"
             )
         print("=" * 50)
+        PYEOF
