@@ -1,0 +1,101 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: wait-for-all-vms
+spec:
+  params:
+    - name: request-file
+      type: string
+  workspaces:
+    - name: source
+  results:
+    - name: vm-ips
+      description: JSON map of vm-name to IP address
+  steps:
+    - name: wait
+      image: python:3.11-slim
+      script: |
+        #!/bin/bash
+        pip install pyyaml -q
+
+        curl -sLo /tmp/oc.tar.gz \
+          https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+        tar -xzf /tmp/oc.tar.gz -C /tmp/
+        chmod +x /tmp/oc
+
+        python3 << 'PYEOF'
+        import yaml
+        import sys
+        import os
+        import subprocess
+        import time
+        import json
+
+        REQUEST_FILE = "/workspace/source/$(params.request-file)"
+        OC           = "/tmp/oc"
+        MAX_ATTEMPTS = 60
+        SLEEP        = 15
+
+        def run(cmd, check=False):
+            result = subprocess.run(
+                cmd, shell=True,
+                capture_output=True, text=True
+            )
+            return result.stdout.strip()
+
+        with open(REQUEST_FILE) as f:
+            request = yaml.safe_load(f)
+
+        code = request["metadata"]["code"]
+        vms  = request["vms"]
+        vm_names = [vm["name"] for vm in vms]
+
+        print(f"Waiting for {len(vm_names)} VM(s) to be running...")
+        print(f"VMs: {', '.join(vm_names)}\n")
+
+        vm_ips    = {}
+        remaining = list(vm_names)
+
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            print(f"--- Attempt {attempt}/{MAX_ATTEMPTS} ---")
+
+            for name in list(remaining):
+                phase = run(
+                    f"{OC} get vmi {name} "
+                    f"-o jsonpath='{{.status.phase}}' 2>/dev/null"
+                )
+                print(f"  {name}: {phase or 'Pending'}")
+
+                if phase == "Running":
+                    ip = run(
+                        f"{OC} get vmi {name} "
+                        f"-o jsonpath='{{.status.interfaces[0].ipAddress}}'"
+                    )
+                    if ip:
+                        vm_ips[name] = ip
+                        remaining.remove(name)
+                        print(f"  ✅ {name} is Running at {ip}")
+
+            if not remaining:
+                print(f"\n✅ All VMs are running!")
+                break
+
+            if attempt == MAX_ATTEMPTS:
+                print(f"\n❌ Timeout: VMs still not running: {remaining}")
+                sys.exit(1)
+
+            print(f"  Still waiting for: {remaining}")
+            time.sleep(SLEEP)
+
+        print(f"\nWaiting 60s for cloud-init to finish...")
+        time.sleep(60)
+
+        # Write IPs to result
+        result_str = json.dumps(vm_ips)
+        print(f"\nVM IPs: {result_str}")
+        with open("/tekton/results/vm-ips", "w") as f:
+            f.write(result_str)
+
+        print("✅ All VMs ready!")
+        PYEOF
