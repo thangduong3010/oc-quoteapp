@@ -1,0 +1,47 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: vm-provisioning-pipeline
+spec:
+  params:
+    - name: repo-url
+      type: string
+    - name: request-file
+      type: string
+      default: requests/REQ-2024-001.yaml
+
+  workspaces:
+    - name: source
+    - name: ssh-keys
+
+  tasks:
+    - name: clone
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: source
+      params:
+        - name: URL
+          value: $(params.repo-url)
+        - name: DELETE_EXISTING
+          value: "true"
+
+    - name: validate-request
+      runAfter: [clone]
+      taskRef:
+        name: validate-request
+      workspaces:
+        - name: source
+          workspace: source
+      params:
+        - name: request-file
+          value: $(params.request-file)
