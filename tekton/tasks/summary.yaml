@@ -22,7 +22,7 @@ spec:
         curl -sL https://bootstrap.pypa.io/pip/3.9/get-pip.py \
           -o /tmp/get-pip.py
         python3 /tmp/get-pip.py --target=/tmp/pylib -q
-        python3 -m pip install pyyaml \
+        /tmp/pylib/bin/pip install pyyaml \
           --target=/tmp/pylib -q
 
         # Write python script to file
@@ -72,7 +72,7 @@ spec:
         print("=" * 60)
         SCRIPTEOF
 
-        # Run the script passing request file and vm-ips as arguments
+        # Run the script
         python3 /tmp/summary.py \
           /workspace/source/$(params.request-file) \
           '$(params.vm-ips)'
