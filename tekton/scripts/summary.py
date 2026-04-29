@@ -1,0 +1,43 @@
+import sys
+sys.path.insert(0, '/tmp/pylib')
+import yaml
+import json
+
+REQUEST_FILE = sys.argv[1]
+VM_IPS = json.loads(sys.argv[2])
+
+with open(REQUEST_FILE) as f:
+    request = yaml.safe_load(f)
+
+meta = request["metadata"]
+vms = request["vms"]
+
+print("")
+print("=" * 60)
+print("  REQUEST SUMMARY")
+print("=" * 60)
+print(f"  Code:         {meta['code']}")
+print(f"  Requested by: {meta['requestedBy']}")
+print(f"  Team:         {meta['team']}")
+print(f"  Date:         {meta.get('date', 'N/A')}")
+print("=" * 60)
+print(f"  VMs Provisioned: {len(vms)}")
+print("-" * 60)
+
+for vm in vms:
+    name = vm["name"]
+    compute = vm["compute"]
+    disk = vm["disk"]
+    ip = VM_IPS.get(name, "unknown")
+    print(f"  ✅ {name}")
+    print(f"     OS:      {vm['os']['image'].split('/')[-1]}")
+    print(f"     CPU:     {compute['cpu']} cores")
+    print(f"     Memory:  {compute['memory']}")
+    print(f"     Disk:    {disk['size']} ({disk['storageClass']})")
+    print(f"     IP:      {ip}")
+    print("")
+
+print("=" * 60)
+print(f"  STATUS: ✅ COMPLETED ({len(vms)}/{len(vms)} VMs provisioned)")
+print(f"  REQUEST: {meta['code']}")
+print("=" * 60)
