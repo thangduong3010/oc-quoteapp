@@ -22,55 +22,55 @@ spec:
         curl -sL https://bootstrap.pypa.io/pip/3.9/get-pip.py \
           -o /tmp/get-pip.py
         python3 /tmp/get-pip.py --target=/tmp/pylib -q
-        /tmp/pylib/bin/pip install pyyaml \
+        PYTHONPATH=/tmp/pylib python3 -m pip install pyyaml \
           --target=/tmp/pylib -q
 
         # Write python script to file
         cat > /tmp/summary.py << 'SCRIPTEOF'
-        import sys
-        sys.path.insert(0, '/tmp/pylib')
-        import yaml
-        import json
+import sys
+sys.path.insert(0, '/tmp/pylib')
+import yaml
+import json
 
-        REQUEST_FILE = sys.argv[1]
-        VM_IPS       = json.loads(sys.argv[2])
+REQUEST_FILE = sys.argv[1]
+VM_IPS       = json.loads(sys.argv[2])
 
-        with open(REQUEST_FILE) as f:
-            request = yaml.safe_load(f)
+with open(REQUEST_FILE) as f:
+    request = yaml.safe_load(f)
 
-        meta = request["metadata"]
-        vms  = request["vms"]
+meta = request["metadata"]
+vms  = request["vms"]
 
-        print("")
-        print("=" * 60)
-        print(f"  REQUEST SUMMARY")
-        print("=" * 60)
-        print(f"  Code:         {meta['code']}")
-        print(f"  Requested by: {meta['requestedBy']}")
-        print(f"  Team:         {meta['team']}")
-        print(f"  Date:         {meta.get('date', 'N/A')}")
-        print("=" * 60)
-        print(f"  VMs Provisioned: {len(vms)}")
-        print("-" * 60)
+print("")
+print("=" * 60)
+print(f"  REQUEST SUMMARY")
+print("=" * 60)
+print(f"  Code:         {meta['code']}")
+print(f"  Requested by: {meta['requestedBy']}")
+print(f"  Team:         {meta['team']}")
+print(f"  Date:         {meta.get('date', 'N/A')}")
+print("=" * 60)
+print(f"  VMs Provisioned: {len(vms)}")
+print("-" * 60)
 
-        for vm in vms:
-            name    = vm["name"]
-            compute = vm["compute"]
-            disk    = vm["disk"]
-            ip      = VM_IPS.get(name, "unknown")
-            print(f"  ✅ {name}")
-            print(f"     OS:      {vm['os']['image'].split('/')[-1]}")
-            print(f"     CPU:     {compute['cpu']} cores")
-            print(f"     Memory:  {compute['memory']}")
-            print(f"     Disk:    {disk['size']} ({disk['storageClass']})")
-            print(f"     IP:      {ip}")
-            print("")
+for vm in vms:
+    name    = vm["name"]
+    compute = vm["compute"]
+    disk    = vm["disk"]
+    ip      = VM_IPS.get(name, "unknown")
+    print(f"  ✅ {name}")
+    print(f"     OS:      {vm['os']['image'].split('/')[-1]}")
+    print(f"     CPU:     {compute['cpu']} cores")
+    print(f"     Memory:  {compute['memory']}")
+    print(f"     Disk:    {disk['size']} ({disk['storageClass']})")
+    print(f"     IP:      {ip}")
+    print("")
 
-        print("=" * 60)
-        print(f"  STATUS: ✅ COMPLETED ({len(vms)}/{len(vms)} VMs provisioned)")
-        print(f"  REQUEST: {meta['code']}")
-        print("=" * 60)
-        SCRIPTEOF
+print("=" * 60)
+print(f"  STATUS: ✅ COMPLETED ({len(vms)}/{len(vms)} VMs provisioned)")
+print(f"  REQUEST: {meta['code']}")
+print("=" * 60)
+SCRIPTEOF
 
         # Run the script
         python3 /tmp/summary.py \
